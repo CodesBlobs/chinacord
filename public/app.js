@@ -35,6 +35,7 @@ const state = {
   peerStates: new Map(),
   chatScrollPinned: true,
   rooms: [],
+  roomsRefreshTimer: null,
 };
 
 const landingScreen = document.querySelector("#landing-screen");
@@ -253,6 +254,23 @@ async function refreshRooms() {
   }
 }
 
+function startRoomsPolling() {
+  stopRoomsPolling();
+  state.roomsRefreshTimer = setInterval(() => {
+    if (state.room) {
+      return;
+    }
+    refreshRooms().catch(() => {});
+  }, 5000);
+}
+
+function stopRoomsPolling() {
+  if (state.roomsRefreshTimer) {
+    clearInterval(state.roomsRefreshTimer);
+    state.roomsRefreshTimer = null;
+  }
+}
+
 function updateRoomState(nextRoom) {
   if (!nextRoom) {
     teardownRoom("The room was closed or you were disconnected.");
@@ -423,6 +441,7 @@ function startHeartbeat() {
 }
 
 async function enterRoom(payload) {
+  stopRoomsPolling();
   state.token = payload.token;
   state.self = payload.self;
   state.room = payload.room;
@@ -491,6 +510,7 @@ function teardownRoom(reason) {
   state.voiceMesh = null;
   clearInterval(state.heartbeatTimer);
   state.heartbeatTimer = null;
+  startRoomsPolling();
   teardownMic();
 
   for (const userId of state.audioElements.keys()) {
@@ -649,6 +669,7 @@ async function bootstrap() {
   }
 
   tryAutoJoinFromHash();
+  startRoomsPolling();
   await refreshRooms();
   render();
 }

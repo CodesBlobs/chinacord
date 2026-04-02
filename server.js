@@ -16,6 +16,7 @@ const DEFAULT_ICE_SERVERS = [
     urls: [
       "turn:free.expressturn.com:3478?transport=udp",
       "turn:free.expressturn.com:3478?transport=tcp",
+      "turns:free.expressturn.com:5349?transport=tcp",
     ],
     username: "000000002090462309",
     credential: "YkFRm4S7BRDwr0lCloMVCC6nxi4=",
@@ -408,8 +409,13 @@ async function handleApi(req, res, pathname) {
     res.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
       Connection: "keep-alive",
     });
+
+    if (typeof res.flushHeaders === "function") {
+      res.flushHeaders();
+    }
 
     const clients = getClientSet(session.userId);
     clients.add(res);

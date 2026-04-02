@@ -73,11 +73,15 @@ Render can run this app as a single web service.
 
 The included `render.yaml` blueprint mirrors those settings.
 
-Important: this build now includes a default TURN relay in `server.js`, so cross-network and multi-region calling is supported out of the box.
+Important: this build now includes a default TURN relay in `server.js`, including a TLS TURN fallback, so multinational calling is supported out of the box.
+
+For users in China, the relay and the app server both need to be reachable from inside China. If the default public TURN relay is blocked or flaky on a given network, you’ll need a TURN server in a nearby region such as Hong Kong, Singapore, or Japan.
 
 ## TURN Support
 
-Reliable cross-region calling needs TURN, not just STUN. This project includes a default TURN configuration in [server.js](/Users/fred/chinacord/server.js) and exposes it from `/api/config` for the browser to use when creating WebRTC peer connections.
+Reliable multinational calling needs TURN, not just STUN. This project includes a default TURN configuration in [server.js](/Users/fred/chinacord/server.js), including UDP, TCP, and TLS TURN options, and exposes it from `/api/config` for the browser to use when creating WebRTC peer connections.
+
+If China users still cannot join or see audio peers, that is usually a network reachability issue rather than an app bug: use a TURN relay that is reachable from China and preferably hosted nearby.
 
 ### Self-Hosted Coturn
 
