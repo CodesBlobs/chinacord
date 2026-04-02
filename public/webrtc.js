@@ -2,6 +2,7 @@ export class VoiceMesh {
   constructor(options) {
     this.selfId = options.selfId;
     this.getLocalStream = options.getLocalStream;
+    this.getExtraTracks = options.getExtraTracks;
     this.sendSignal = options.sendSignal;
     this.onRemoteStream = options.onRemoteStream;
     this.onPeerState = options.onPeerState;
@@ -63,8 +64,10 @@ export class VoiceMesh {
     const stream = await this.getLocalStream();
     const peer = this.ensurePeer(peerId);
     const existingSenders = peer.connection.getSenders();
+    const extraTracks = this.getExtraTracks ? await this.getExtraTracks() : [];
+    const tracks = [...stream.getTracks(), ...extraTracks];
 
-    for (const track of stream.getTracks()) {
+    for (const track of tracks) {
       if (!existingSenders.some((sender) => sender.track && sender.track.id === track.id)) {
         peer.connection.addTrack(track, stream);
       }
@@ -79,6 +82,56 @@ export class VoiceMesh {
     // not let both sides send an offer at the same time.
     const offer = await peer.connection.createOffer({
       offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
+    });
+    await peer.connection.setLocalDescription(offer);
+    this.sendSignal(peerId, {
+      type: "offer",
+      sdp: offer,
+    });
+  }
+
+  async setVideoTrack(videoTrack) {
+    for (const [peerId, peer] of this.peers.entries()) {
+      const existingVideoSender = this.getVideoSender(peer.connection);
+
+      if (videoTrack) {
+        if (existingVideoSender) {
+          await existingVideoSender.replaceTrack(videoTrack);
+        } else {
+          peer.connection.addTrack(videoTrack, new MediaStream([videoTrack]));
+          await this.renegotiate(peerId);
+        }
+      } else if (existingVideoSender) {
+        await existingVideoSender.replaceTrack(null);
+        await this.renegotiate(peerId);
+      }
+    }
+  }
+
+  getVideoSender(connection) {
+    const senderWithTrack = connection
+      .getSenders()
+      .find((sender) => sender.track && sender.track.kind === "video");
+    if (senderWithTrack) {
+      return senderWithTrack;
+    }
+
+    const transceiver = connection
+      .getTransceivers()
+      .find((item) => item.receiver?.track?.kind === "video");
+    return transceiver?.sender || null;
+  }
+
+  async renegotiate(peerId) {
+    const peer = this.ensurePeer(peerId);
+    if (peer.connection.signalingState !== "stable") {
+      return;
+    }
+
+    const offer = await peer.connection.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
     });
     await peer.connection.setLocalDescription(offer);
     this.sendSignal(peerId, {

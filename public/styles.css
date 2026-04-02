@@ -293,6 +293,49 @@ button:disabled {
   gap: 0.9rem;
 }
 
+.video-card {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.local-video-shell {
+  border: 1px solid rgba(127, 160, 219, 0.2);
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  min-height: 180px;
+}
+
+.local-video,
+.remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.remote-video-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.remote-video-card {
+  padding: 0.75rem;
+  border-radius: 18px;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.remote-video-label {
+  font-size: 0.78rem;
+}
+
+.remote-video-card .remote-video {
+  border-radius: 12px;
+  min-height: 140px;
+}
+
 .chat-log {
   display: grid;
   gap: 0.75rem;
@@ -388,8 +431,60 @@ button:disabled {
 }
 
 .user-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 1.02rem;
   font-weight: 700;
+}
+
+.talk-dot {
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 999px;
+  display: inline-block;
+  background: rgba(145, 167, 199, 0.5);
+  box-shadow: 0 0 0 0 rgba(145, 167, 199, 0.15);
+}
+
+.talk-dot.silent {
+  background: rgba(145, 167, 199, 0.52);
+}
+
+.talk-dot.talking {
+  background: #37d6a3;
+  box-shadow: 0 0 0 0 rgba(55, 214, 163, 0.45);
+  animation: talkPulse 1s ease-out infinite;
+}
+
+.remote-video-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@keyframes talkPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(55, 214, 163, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(55, 214, 163, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(55, 214, 163, 0);
+  }
+}
+
+.talking-indicator {
+  font-size: 0.78rem;
+}
+
+.talking-indicator.talking {
+  color: #8fffd7;
+}
+
+.talking-indicator.silent {
+  color: var(--muted);
 }
 
 .pill {

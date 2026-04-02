@@ -417,13 +417,18 @@ async function handleApi(req, res, pathname) {
       res.flushHeaders();
     }
 
+    if (res.socket) {
+      res.socket.setNoDelay(true);
+      res.socket.setKeepAlive(true);
+    }
+
     const clients = getClientSet(session.userId);
     clients.add(res);
     res.write(`data: ${JSON.stringify({ type: "room-state", room: serializeRoom(room) })}\n\n`);
 
     const keepalive = setInterval(() => {
       res.write(": keepalive\n\n");
-    }, 15000);
+    }, 5000);
 
     req.on("close", () => {
       clearInterval(keepalive);

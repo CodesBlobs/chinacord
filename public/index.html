@@ -71,6 +71,10 @@
               <div class="control-stack">
                 <button id="connect-mic-button" type="button">Connect Mic</button>
                 <button id="mute-button" class="ghost-button" type="button">Mute</button>
+                <button id="camera-button" class="ghost-button" type="button">Start Camera</button>
+                <button id="screen-share-button" class="ghost-button" type="button">
+                  Share Screen
+                </button>
               </div>
               <p id="connection-status" class="muted-text">Mic offline.</p>
             </section>
@@ -99,6 +103,22 @@
           </aside>
 
           <div class="main-column">
+            <section class="panel video-card">
+              <div class="card-header">
+                <div>
+                  <p class="section-label">Video</p>
+                  <h3>Camera & Screen Share</h3>
+                </div>
+                <p id="local-video-status" class="muted-text">Camera and screen share are off.</p>
+              </div>
+
+              <div class="local-video-shell">
+                <video id="local-video" class="local-video hidden" autoplay playsinline muted></video>
+              </div>
+
+              <div id="remote-video-grid" class="remote-video-grid"></div>
+            </section>
+
             <section class="panel users-card">
               <div class="card-header">
                 <div>
