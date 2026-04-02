@@ -26,6 +26,10 @@ export function getConfig() {
   return request("/api/config");
 }
 
+export function getRooms() {
+  return request("/api/rooms");
+}
+
 export function joinRoom(roomId, displayName) {
   return request("/api/join", {
     method: "POST",
@@ -52,6 +56,14 @@ export function setMuted(token, muted) {
     method: "POST",
     token,
     body: { muted },
+  });
+}
+
+export function sendChat(token, text) {
+  return request("/api/chat", {
+    method: "POST",
+    token,
+    body: { text },
   });
 }
 

@@ -20,7 +20,7 @@
         <h1>DropZone Voice</h1>
         <p class="hero-copy">
           Lightweight gaming voice rooms powered entirely by the browser. Create a room,
-          join from another tab or window, and talk with WebRTC.
+          join from another tab or window, and talk with WebRTC. Created by Sir Egghead the Third(fred in his Egghead arc)
         </p>
 
         <div class="notice">
@@ -41,9 +41,8 @@
             <p class="section-label">Join room</p>
             <label class="field-label" for="join-name">Display name</label>
             <input id="join-name" type="text" maxlength="24" placeholder="Teammate" />
-            <label class="field-label" for="room-code">Room code</label>
-            <input id="room-code" type="text" maxlength="8" placeholder="AB12CD" />
-            <button id="join-room-button" type="button">Join Room</button>
+            <p class="muted-text">Choose a room from the list below.</p>
+            <div id="room-list" class="room-list" aria-live="polite"></div>
           </section>
         </div>
 
@@ -98,16 +97,44 @@
             </section>
           </aside>
 
-          <section class="panel users-card">
-            <div class="card-header">
-              <div>
-                <p class="section-label">Connected users</p>
-                <h3>Voice roster</h3>
+          <div class="main-column">
+            <section class="panel users-card">
+              <div class="card-header">
+                <div>
+                  <p class="section-label">Connected users</p>
+                  <h3>Voice roster</h3>
+                </div>
+                <p id="users-count" class="muted-text">0 users</p>
               </div>
-              <p id="users-count" class="muted-text">0 users</p>
-            </div>
-            <div id="users-list" class="users-list"></div>
-          </section>
+              <div id="users-list" class="users-list"></div>
+            </section>
+
+            <section class="panel chat-card">
+              <div class="card-header">
+                <div>
+                  <p class="section-label">Chat</p>
+                  <h3>Room messages</h3>
+                </div>
+                <p class="muted-text">Type to everyone in the room</p>
+              </div>
+
+              <div id="chat-log" class="chat-log" aria-live="polite"></div>
+
+              <div class="chat-compose">
+                <label class="field-label" for="chat-input">Message</label>
+                <textarea
+                  id="chat-input"
+                  rows="3"
+                  maxlength="500"
+                  placeholder="Say something to the room..."
+                ></textarea>
+                <div class="chat-actions">
+                  <p class="muted-text">Press Enter to send, Shift+Enter for a new line.</p>
+                  <button id="send-chat-button" type="button">Send message</button>
+                </div>
+              </div>
+            </section>
+          </div>
         </section>
       </section>
     </main>

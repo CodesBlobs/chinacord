@@ -8,6 +8,8 @@ const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const ROOM_LIMIT = 8;
 const USER_STALE_MS = 30000;
+const PERMANENT_ROOM_ID = "SPEDRAJ";
+const PERMANENT_ROOM_NAME = "Egghead";
 const DEFAULT_ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   {
@@ -49,10 +51,72 @@ function publicUser(user) {
 function serializeRoom(room) {
   return {
     id: room.id,
+    name: room.name || null,
+    messages: Array.isArray(room.messages) ? room.messages.slice(-50) : [],
     users: Array.from(room.users.values())
       .map(publicUser)
       .sort((a, b) => a.joinedAt - b.joinedAt),
   };
+}
+
+  function listRooms() {
+    ensurePermanentRoom();
+    return Array.from(rooms.values())
+      .map((room) => ({
+        id: room.id,
+        name: room.name || null,
+        users: room.users.size,
+        createdAt: room.createdAt,
+      }))
+      .sort((a, b) => {
+        if (a.id === PERMANENT_ROOM_ID) return -1;
+        if (b.id === PERMANENT_ROOM_ID) return 1;
+        if (b.users !== a.users) return b.users - a.users;
+        return a.id.localeCompare(b.id);
+      });
+  }
+
+function createRoomRecord(id, name = null) {
+  return {
+    id,
+    name,
+    createdAt: now(),
+    messages: [],
+    users: new Map(),
+  };
+}
+
+function isPermanentRoom(roomId) {
+  return roomId === PERMANENT_ROOM_ID;
+}
+
+function ensurePermanentRoom() {
+  if (!rooms.has(PERMANENT_ROOM_ID)) {
+    rooms.set(PERMANENT_ROOM_ID, createRoomRecord(PERMANENT_ROOM_ID, PERMANENT_ROOM_NAME));
+  }
+}
+
+ensurePermanentRoom();
+
+function appendRoomMessage(room, user, text) {
+  if (!Array.isArray(room.messages)) {
+    room.messages = [];
+  }
+
+  const message = {
+    id: crypto.randomUUID(),
+    userId: user.id,
+    userName: user.name,
+    text,
+    createdAt: now(),
+  };
+
+  room.messages.push(message);
+  if (room.messages.length > 50) {
+    room.messages = room.messages.slice(-50);
+  }
+
+  return message;
 }
 
 function sendJson(res, statusCode, payload) {
@@ -155,7 +219,7 @@ function removeUserFromRoom(roomId, userId) {
     }
   }
 
-  if (room.users.size === 0) {
+  if (room.users.size === 0 && !isPermanentRoom(roomId)) {
     rooms.delete(roomId);
     return;
   }
@@ -164,6 +228,7 @@ function removeUserFromRoom(roomId, userId) {
 }
 
 function cleanupStaleUsers() {
+  ensurePermanentRoom();
   const cutoff = now() - USER_STALE_MS;
 
   for (const [roomId, room] of rooms.entries()) {
@@ -185,7 +250,7 @@ function cleanupStaleUsers() {
       }
     }
 
-    if (room.users.size === 0) {
+    if (room.users.size === 0 && !isPermanentRoom(roomId)) {
       rooms.delete(roomId);
       continue;
     }
@@ -227,10 +292,17 @@ function serveStatic(req, res, pathname) {
 }
 
 async function handleApi(req, res, pathname) {
+  ensurePermanentRoom();
+
   if (pathname === "/api/config" && req.method === "GET") {
     sendJson(res, 200, {
       iceServers: DEFAULT_ICE_SERVERS,
     });
+    return;
+  }
+
+  if (pathname === "/api/rooms" && req.method === "GET") {
+    sendJson(res, 200, { rooms: listRooms() });
     return;
   }
 
@@ -252,8 +324,7 @@ async function handleApi(req, res, pathname) {
     };
 
     rooms.set(roomId, {
-      id: roomId,
-      createdAt: now(),
+      ...createRoomRecord(roomId),
       users: new Map([[user.id, user]]),
     });
 
@@ -280,6 +351,10 @@ async function handleApi(req, res, pathname) {
     if (!roomId) {
       sendJson(res, 400, { error: "Room code is required." });
       return;
+    }
+
+    if (roomId === PERMANENT_ROOM_ID) {
+      ensurePermanentRoom();
     }
 
     const room = rooms.get(roomId);
@@ -381,6 +456,22 @@ async function handleApi(req, res, pathname) {
     user.lastSeen = now();
     emitRoomState(session.roomId);
     sendJson(res, 200, { room: serializeRoom(room) });
+    return;
+  }
+
+  if (pathname === "/api/chat" && req.method === "POST") {
+    const body = await readBody(req);
+    const text = String(body.text || body.message || "").trim().slice(0, 500);
+
+    if (!text) {
+      sendJson(res, 400, { error: "Message is required." });
+      return;
+    }
+
+    const message = appendRoomMessage(room, user, text);
+    user.lastSeen = now();
+    emitRoomState(session.roomId);
+    sendJson(res, 200, { room: serializeRoom(room), message });
     return;
   }
 

@@ -1,9 +1,11 @@
 import {
   createRoom,
   getConfig,
+  getRooms,
   heartbeat,
   joinRoom,
   leaveRoom,
+  sendChat,
   sendSignal,
   setMuted,
   subscribeToEvents,
@@ -31,16 +33,17 @@ const state = {
   heartbeatTimer: null,
   audioElements: new Map(),
   peerStates: new Map(),
+  chatScrollPinned: true,
+  rooms: [],
 };
 
 const landingScreen = document.querySelector("#landing-screen");
 const roomScreen = document.querySelector("#room-screen");
 const createNameInput = document.querySelector("#create-name");
 const joinNameInput = document.querySelector("#join-name");
-const roomCodeInput = document.querySelector("#room-code");
 const createRoomButton = document.querySelector("#create-room-button");
-const joinRoomButton = document.querySelector("#join-room-button");
 const landingError = document.querySelector("#landing-error");
+const roomList = document.querySelector("#room-list");
 const roomTitle = document.querySelector("#room-title");
 const roomSubtitle = document.querySelector("#room-subtitle");
 const copyRoomButton = document.querySelector("#copy-room-button");
@@ -57,7 +60,65 @@ const gainSlider = document.querySelector("#gain-slider");
 const gainValue = document.querySelector("#gain-value");
 const usersCount = document.querySelector("#users-count");
 const usersList = document.querySelector("#users-list");
+const chatLog = document.querySelector("#chat-log");
+const chatInput = document.querySelector("#chat-input");
+const sendChatButton = document.querySelector("#send-chat-button");
 const remoteAudioRoot = document.querySelector("#remote-audio-root");
+
+function formatChatTime(timestamp) {
+  return new Intl.DateTimeFormat([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function renderChat() {
+  if (!chatLog || !state.room) {
+    return;
+  }
+
+  const shouldStickToBottom =
+    chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 72;
+
+  chatLog.innerHTML = "";
+  const messages = Array.isArray(state.room.messages) ? state.room.messages : [];
+
+  if (messages.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "chat-empty muted-text";
+    empty.textContent = "No messages yet. Say hi.";
+    chatLog.append(empty);
+  } else {
+    for (const message of messages) {
+      const entry = document.createElement("article");
+      entry.className = "chat-message";
+
+      const header = document.createElement("div");
+      header.className = "chat-message-header";
+
+      const author = document.createElement("span");
+      author.className = "chat-author";
+      author.textContent = message.userId === state.self?.id ? `${message.userName} (You)` : message.userName;
+
+      const time = document.createElement("span");
+      time.className = "chat-time muted-text";
+      time.textContent = formatChatTime(message.createdAt);
+
+      header.append(author, time);
+
+      const body = document.createElement("p");
+      body.className = "chat-text";
+      body.textContent = message.text;
+
+      entry.append(header, body);
+      chatLog.append(entry);
+    }
+  }
+
+  if (shouldStickToBottom) {
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+}
 
 function render() {
   const inRoom = Boolean(state.room && state.self);
@@ -68,7 +129,7 @@ function render() {
     return;
   }
 
-  roomTitle.textContent = state.room.id;
+  roomTitle.textContent = state.room.name ? `${state.room.name} · ${state.room.id}` : state.room.id;
   roomSubtitle.textContent = `${state.room.users.length} player${state.room.users.length === 1 ? "" : "s"} in voice.`;
   usersCount.textContent = `${state.room.users.length} user${state.room.users.length === 1 ? "" : "s"}`;
   connectionStatus.textContent = state.localStream
@@ -119,10 +180,77 @@ function render() {
     card.append(row, meta);
     usersList.append(card);
   }
+
+  renderChat();
 }
 
 function setLandingError(message) {
   landingError.textContent = message || "";
+}
+
+function renderRoomList() {
+  if (!roomList) {
+    return;
+  }
+
+  roomList.innerHTML = "";
+
+  if (!state.rooms.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted-text";
+    empty.textContent = "No rooms available right now.";
+    roomList.append(empty);
+    return;
+  }
+
+  for (const room of state.rooms) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "room-list-item";
+
+    const title = room.name ? `${room.name} · ${room.id}` : room.id;
+    const userLabel = `${room.users} user${room.users === 1 ? "" : "s"}`;
+
+    button.innerHTML = `
+      <span class="room-list-title"></span>
+      <span class="room-list-meta"></span>
+    `;
+    button.querySelector(".room-list-title").textContent = title;
+    button.querySelector(".room-list-meta").textContent = userLabel;
+
+    button.addEventListener("click", async () => {
+      try {
+        setLandingError("");
+        const payload = await joinRoom(room.id, joinNameInput.value);
+        await enterRoom(payload);
+      } catch (error) {
+        setLandingError(error.message);
+      }
+    });
+
+    roomList.append(button);
+  }
+}
+
+async function refreshRooms() {
+  try {
+    const payload = await getRooms();
+    state.rooms = Array.isArray(payload.rooms) ? payload.rooms : [];
+    renderRoomList();
+  } catch (error) {
+    state.rooms = [
+      {
+        id: "SPEDRAJ",
+        name: "Egghead",
+        users: 0,
+        createdAt: Date.now(),
+      },
+    ];
+    renderRoomList();
+    if (error?.message && error.message !== "Unauthorized") {
+      console.warn("Room list fetch failed", error);
+    }
+  }
 }
 
 function updateRoomState(nextRoom) {
@@ -352,6 +480,8 @@ async function enterRoom(payload) {
       });
     }
   }
+
+  chatInput?.focus();
 }
 
 function teardownRoom(reason) {
@@ -371,25 +501,36 @@ function teardownRoom(reason) {
   state.self = null;
   state.token = null;
   state.peerStates.clear();
+  state.chatScrollPinned = true;
   history.replaceState(null, "", location.pathname);
   setLandingError(reason || "");
+  refreshRooms().catch(() => {});
   render();
+}
+
+async function handleSendChat() {
+  if (!state.token || !chatInput) {
+    return;
+  }
+
+  const text = chatInput.value.trim();
+  if (!text) {
+    return;
+  }
+
+  chatInput.value = "";
+  try {
+    const payload = await sendChat(state.token, text);
+    updateRoomState(payload.room);
+  } catch (error) {
+    connectionStatus.textContent = error.message;
+  }
 }
 
 async function handleCreateRoom() {
   try {
     setLandingError("");
-    const payload = createRoom(createNameInput.value);
-    await enterRoom(payload);
-  } catch (error) {
-    setLandingError(error.message);
-  }
-}
-
-async function handleJoinRoom() {
-  try {
-    setLandingError("");
-    const payload = joinRoom(roomCodeInput.value, joinNameInput.value);
+    const payload = await createRoom(createNameInput.value);
     await enterRoom(payload);
   } catch (error) {
     setLandingError(error.message);
@@ -408,7 +549,6 @@ async function handleLeaveRoom() {
 }
 
 createRoomButton.addEventListener("click", handleCreateRoom);
-joinRoomButton.addEventListener("click", handleJoinRoom);
 
 copyRoomButton.addEventListener("click", async () => {
   if (!state.room) {
@@ -468,6 +608,17 @@ gainSlider.addEventListener("input", () => {
   render();
 });
 
+sendChatButton?.addEventListener("click", () => {
+  handleSendChat();
+});
+
+chatInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    handleSendChat();
+  }
+});
+
 window.addEventListener("beforeunload", () => {
   if (state.token) {
     fetch("/api/leave", {
@@ -485,7 +636,6 @@ function tryAutoJoinFromHash() {
   if (!match) {
     return;
   }
-  roomCodeInput.value = match[1].toUpperCase();
 }
 
 async function bootstrap() {
@@ -499,6 +649,7 @@ async function bootstrap() {
   }
 
   tryAutoJoinFromHash();
+  await refreshRooms();
   render();
 }
 

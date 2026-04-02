@@ -58,9 +58,26 @@ This is one deployable project:
 
 For production, deploy to any Node host. If you later want true serverless deployment, the same route shapes can be moved into serverless functions, but the in-memory room store would need shared storage.
 
+### Render
+
+Render can run this app as a single web service.
+
+1. Push this repo to GitHub.
+2. In Render, create a new Web Service from the repo.
+3. Use these settings:
+    - **Runtime**: Node
+    - **Build Command**: `npm install`
+    - **Start Command**: `npm start`
+    - **Health Check Path**: `/`
+4. Leave environment variables empty.
+
+The included `render.yaml` blueprint mirrors those settings.
+
+Important: this build now includes a default TURN relay in `server.js`, so cross-network and multi-region calling is supported out of the box.
+
 ## TURN Support
 
-Reliable cross-region calling needs TURN, not just STUN. This project now includes a hardcoded testing TURN configuration in [server.js](/Users/fred/chinacord/server.js). The frontend loads that config from `/api/config` and uses it when creating WebRTC peer connections.
+Reliable cross-region calling needs TURN, not just STUN. This project includes a default TURN configuration in [server.js](/Users/fred/chinacord/server.js) and exposes it from `/api/config` for the browser to use when creating WebRTC peer connections.
 
 ### Self-Hosted Coturn
 
@@ -70,3 +87,5 @@ This repo also includes a minimal Coturn setup:
 - [turnserver.conf](/Users/fred/chinacord/turnserver.conf)
 
 Update the public IP / hostname and shared secret or password before using it on the public internet.
+
+If you are deploying to Render, skip the local coturn container.
