@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DropZone Voice</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid"></div>
+    <main class="app-shell">
+      <section id="landing-screen" class="panel hero-panel">
+        <p class="eyebrow">Frontend-only voice stack</p>
+        <h1>DropZone Voice</h1>
+        <p class="hero-copy">
+          Lightweight gaming voice rooms powered entirely by the browser. Create a room,
+          join from another tab or window, and talk with WebRTC.
+        </p>
+
+        <div class="notice">
+          This frontend-only build uses <code>BroadcastChannel</code> and <code>localStorage</code>
+          for room state and signaling, so it works across tabs and windows on the same browser
+          profile and origin.
+        </div>
+
+        <div class="entry-grid">
+          <section class="panel entry-card">
+            <p class="section-label">Create room</p>
+            <label class="field-label" for="create-name">Display name</label>
+            <input id="create-name" type="text" maxlength="24" placeholder="Squad leader" />
+            <button id="create-room-button" type="button">Create Room</button>
+          </section>
+
+          <section class="panel entry-card">
+            <p class="section-label">Join room</p>
+            <label class="field-label" for="join-name">Display name</label>
+            <input id="join-name" type="text" maxlength="24" placeholder="Teammate" />
+            <label class="field-label" for="room-code">Room code</label>
+            <input id="room-code" type="text" maxlength="8" placeholder="AB12CD" />
+            <button id="join-room-button" type="button">Join Room</button>
+          </section>
+        </div>
+
+        <p id="landing-error" class="error-text" aria-live="polite"></p>
+      </section>
+
+      <section id="room-screen" class="room-layout hidden">
+        <header class="panel room-header">
+          <div>
+            <p class="eyebrow">Room</p>
+            <h2 id="room-title">------</h2>
+            <p id="room-subtitle" class="muted-text">Waiting for players.</p>
+          </div>
+          <div class="header-actions">
+            <button id="copy-room-button" class="ghost-button" type="button">Copy code</button>
+            <button id="toggle-mic-test-button" class="ghost-button" type="button">Hide mic test</button>
+            <button id="leave-room-button" class="danger-button" type="button">Leave room</button>
+          </div>
+        </header>
+
+        <section class="room-grid">
+          <aside class="sidebar">
+            <section class="panel controls-card">
+              <p class="section-label">Controls</p>
+              <div class="control-stack">
+                <button id="connect-mic-button" type="button">Connect Mic</button>
+                <button id="mute-button" class="ghost-button" type="button">Mute</button>
+              </div>
+              <p id="connection-status" class="muted-text">Mic offline.</p>
+            </section>
+
+            <section id="mic-test-card" class="panel mic-card">
+              <div class="mic-card-header">
+                <div>
+                  <p class="section-label">Mic test</p>
+                  <h3>Input monitor</h3>
+                </div>
+                <button id="close-mic-test-button" class="ghost-button compact-button" type="button">
+                  Close
+                </button>
+              </div>
+
+              <p id="mic-test-status" class="muted-text">Connect your mic to start testing.</p>
+              <div class="meter-shell">
+                <div id="mic-meter-fill" class="meter-fill"></div>
+              </div>
+              <div class="gain-row">
+                <label class="field-label" for="gain-slider">Input gain</label>
+                <span id="gain-value" class="muted-text">100%</span>
+              </div>
+              <input id="gain-slider" type="range" min="0" max="250" value="100" />
+            </section>
+          </aside>
+
+          <section class="panel users-card">
+            <div class="card-header">
+              <div>
+                <p class="section-label">Connected users</p>
+                <h3>Voice roster</h3>
+              </div>
+              <p id="users-count" class="muted-text">0 users</p>
+            </div>
+            <div id="users-list" class="users-list"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <div id="remote-audio-root" class="hidden"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+  </html>
