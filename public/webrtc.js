@@ -24,6 +24,10 @@ export class VoiceMesh {
       connection,
       remoteStream: new MediaStream(),
       candidateQueue: [],
+      makingOffer: false,
+      ignoreOffer: false,
+      isSettingRemoteAnswerPending: false,
+      isClosing: false,
     };
 
     connection.ontrack = (event) => {
@@ -57,7 +61,7 @@ export class VoiceMesh {
 
     connection.onconnectionstatechange = () => {
       this.onPeerState(peerId, connection.connectionState);
-      if (["failed", "closed", "disconnected"].includes(connection.connectionState)) {
+      if (["failed", "closed"].includes(connection.connectionState)) {
         this.closePeer(peerId);
       }
     };
@@ -81,8 +85,11 @@ export class VoiceMesh {
     };
 
     this.peers.set(peerId, peer);
-    this.attachLocalTracks(peerId).catch(() => {});
     return peer;
+  }
+
+  isPolitePeer(peerId) {
+    return String(this.selfId).localeCompare(String(peerId)) > 0;
   }
 
   async attachLocalTracks(peerId) {
@@ -160,19 +167,27 @@ export class VoiceMesh {
 
   async renegotiate(peerId) {
     const peer = this.ensurePeer(peerId);
-    if (peer.connection.signalingState !== "stable") {
+    if (peer.isClosing || peer.connection.signalingState !== "stable") {
       return;
     }
 
-    const offer = await peer.connection.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
-    });
-    await peer.connection.setLocalDescription(offer);
-    this.sendSignal(peerId, {
-      type: "offer",
-      sdp: offer,
-    });
+    try {
+      peer.makingOffer = true;
+      const offer = await peer.connection.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+      if (peer.connection.signalingState !== "stable") {
+        return;
+      }
+      await peer.connection.setLocalDescription(offer);
+      this.sendSignal(peerId, {
+        type: "offer",
+        sdp: peer.connection.localDescription,
+      });
+    } finally {
+      peer.makingOffer = false;
+    }
   }
 
   async handleSignal(message) {
@@ -185,32 +200,39 @@ export class VoiceMesh {
     const peer = this.ensurePeer(peerId);
 
     if (signal.type === "offer") {
+      const readyForOffer =
+        !peer.makingOffer &&
+        (peer.connection.signalingState === "stable" || peer.isSettingRemoteAnswerPending);
+      const offerCollision = !readyForOffer;
+      peer.ignoreOffer = !this.isPolitePeer(peerId) && offerCollision;
+
+      if (peer.ignoreOffer) {
+        return;
+      }
+
       await this.attachLocalTracks(peerId);
+      if (offerCollision) {
+        await peer.connection.setLocalDescription({ type: "rollback" });
+      }
       await peer.connection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
 
-      // Process queued candidates
-      for (const candidate of peer.candidateQueue) {
-        await peer.connection.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
-      }
-      peer.candidateQueue = [];
-
       const answer = await peer.connection.createAnswer();
+      peer.isSettingRemoteAnswerPending = true;
       await peer.connection.setLocalDescription(answer);
+      peer.isSettingRemoteAnswerPending = false;
       this.sendSignal(peerId, {
         type: "answer",
-        sdp: answer,
+        sdp: peer.connection.localDescription,
       });
+      await this.flushCandidateQueue(peer);
       return;
     }
 
     if (signal.type === "answer") {
+      peer.isSettingRemoteAnswerPending = true;
       await peer.connection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-
-      // Process queued candidates
-      for (const candidate of peer.candidateQueue) {
-        await peer.connection.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
-      }
-      peer.candidateQueue = [];
+      peer.isSettingRemoteAnswerPending = false;
+      await this.flushCandidateQueue(peer);
       return;
     }
 
@@ -223,13 +245,23 @@ export class VoiceMesh {
     }
   }
 
+  async flushCandidateQueue(peer) {
+    for (const candidate of peer.candidateQueue) {
+      await peer.connection.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+    }
+    peer.candidateQueue = [];
+  }
+
   closePeer(peerId) {
     const peer = this.peers.get(peerId);
     if (!peer) {
       return;
     }
+    peer.isClosing = true;
     peer.connection.onicecandidate = null;
     peer.connection.ontrack = null;
+    peer.connection.onnegotiationneeded = null;
+    peer.connection.onconnectionstatechange = null;
     peer.connection.close();
     this.peers.delete(peerId);
   }

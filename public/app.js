@@ -371,6 +371,21 @@ function updateRoomState(nextRoom) {
     }
   }
 
+  if (state.voiceMesh && state.self?.id) {
+    for (const user of nextRoom.users) {
+      if (user.id === state.self.id) {
+        continue;
+      }
+
+      if (!previousUserIds.has(user.id) || !state.voiceMesh.peers.has(user.id)) {
+        state.peerStates.set(user.id, "connecting");
+        state.voiceMesh.createOffer(user.id).catch((error) => {
+          console.error("Peer sync failed", error);
+        });
+      }
+    }
+  }
+
   render();
 }
 
