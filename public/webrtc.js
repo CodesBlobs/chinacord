@@ -23,15 +23,36 @@ export class VoiceMesh {
       id: peerId,
       connection,
       remoteStream: new MediaStream(),
+      candidateQueue: [],
     };
 
     connection.ontrack = (event) => {
-      for (const track of event.streams[0].getTracks()) {
+      const streams = event.streams;
+      const track = event.track;
+
+      if (streams && streams.length > 0) {
+        for (const stream of streams) {
+          for (const streamTrack of stream.getTracks()) {
+            if (!peer.remoteStream.getTracks().some((existing) => existing.id === streamTrack.id)) {
+              peer.remoteStream.addTrack(streamTrack);
+            }
+          }
+        }
+      } else if (track) {
         if (!peer.remoteStream.getTracks().some((existing) => existing.id === track.id)) {
           peer.remoteStream.addTrack(track);
         }
       }
-      this.onRemoteStream(peerId, peer.remoteStream);
+
+      const notify = () => {
+        this.onRemoteStream(peerId, peer.remoteStream);
+      };
+
+      track.onended = notify;
+      track.onmute = notify;
+      track.onunmute = notify;
+
+      notify();
     };
 
     connection.onconnectionstatechange = () => {
@@ -53,6 +74,10 @@ export class VoiceMesh {
         type: "candidate",
         candidate: event.candidate,
       });
+    };
+
+    connection.onnegotiationneeded = () => {
+      this.renegotiate(peerId).catch(() => {});
     };
 
     this.peers.set(peerId, peer);
@@ -92,19 +117,29 @@ export class VoiceMesh {
   }
 
   async setVideoTrack(videoTrack) {
+    const micStream = await this.getLocalStream();
     for (const [peerId, peer] of this.peers.entries()) {
       const existingVideoSender = this.getVideoSender(peer.connection);
 
       if (videoTrack) {
         if (existingVideoSender) {
-          await existingVideoSender.replaceTrack(videoTrack);
+          if (existingVideoSender.track?.id !== videoTrack.id) {
+            await existingVideoSender.replaceTrack(videoTrack);
+          }
         } else {
-          peer.connection.addTrack(videoTrack, new MediaStream([videoTrack]));
+          peer.connection.addTrack(videoTrack, micStream);
           await this.renegotiate(peerId);
         }
       } else if (existingVideoSender) {
         await existingVideoSender.replaceTrack(null);
-        await this.renegotiate(peerId);
+        // After removing track, we might want to remove the sender entirely 
+        // to keep SDP clean, but replaceTrack(null) is often enough.
+        // To truly remove, we'd need to use removeTrack and renegotiate.
+        const sender = this.getVideoSender(peer.connection);
+        if (sender) {
+          peer.connection.removeTrack(sender);
+          await this.renegotiate(peerId);
+        }
       }
     }
   }
@@ -152,6 +187,13 @@ export class VoiceMesh {
     if (signal.type === "offer") {
       await this.attachLocalTracks(peerId);
       await peer.connection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+
+      // Process queued candidates
+      for (const candidate of peer.candidateQueue) {
+        await peer.connection.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+      }
+      peer.candidateQueue = [];
+
       const answer = await peer.connection.createAnswer();
       await peer.connection.setLocalDescription(answer);
       this.sendSignal(peerId, {
@@ -163,11 +205,21 @@ export class VoiceMesh {
 
     if (signal.type === "answer") {
       await peer.connection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+
+      // Process queued candidates
+      for (const candidate of peer.candidateQueue) {
+        await peer.connection.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+      }
+      peer.candidateQueue = [];
       return;
     }
 
     if (signal.type === "candidate") {
-      await peer.connection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+      if (peer.connection.remoteDescription && peer.connection.remoteDescription.type) {
+        await peer.connection.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
+      } else {
+        peer.candidateQueue.push(signal.candidate);
+      }
     }
   }
 

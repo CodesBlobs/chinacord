@@ -657,6 +657,12 @@ function ensureRemoteAudio(userId, stream) {
     state.audioElements.set(userId, audio);
   }
   audio.srcObject = stream;
+  audio.play().catch((error) => {
+    if (error.name === "NotAllowedError") {
+      console.warn("Audio playback blocked by browser. User interaction required.");
+      connectionStatus.textContent = "Audio playback blocked. Click anywhere to enable sound.";
+    }
+  });
   ensureRemoteTalkDetector(userId, stream);
 }
 
@@ -681,6 +687,9 @@ async function ensureMic() {
   });
 
   const audioContext = new AudioContextClass();
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
   const micSource = audioContext.createMediaStreamSource(rawStream);
   const gainNode = audioContext.createGain();
   const destination = audioContext.createMediaStreamDestination();
@@ -1067,6 +1076,21 @@ function tryAutoJoinFromHash() {
 }
 
 async function bootstrap() {
+  document.addEventListener("click", () => {
+    if (state.audioContext && state.audioContext.state === "suspended") {
+      state.audioContext.resume().catch(() => {});
+    }
+    if (state.remoteAudioContext && state.remoteAudioContext.state === "suspended") {
+      state.remoteAudioContext.resume().catch(() => {});
+    }
+    // Try to play all remote audio elements that might be paused
+    for (const audio of state.audioElements.values()) {
+      if (audio.paused) {
+        audio.play().catch(() => {});
+      }
+    }
+  }, { once: false });
+
   try {
     const config = await getConfig();
     if (Array.isArray(config.iceServers) && config.iceServers.length > 0) {
